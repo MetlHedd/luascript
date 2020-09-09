@@ -1,0 +1,63 @@
+name: 🏁 Windows Builds
+on: [push, pull_request]
+
+# Global Cache Settings
+env:
+  GODOT_BASE_BRANCH: '3.2.2-stable'
+  BASE_BRANCH: master
+  SCONS_CACHE_LIMIT: 4096
+
+jobs:
+  linux-editor:
+    runs-on: "windows-latest"
+    name: Editor (target=release_debug, tools=yes)
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: 'godotengine/godot'
+          ref: ${{ env.GODOT_BASE_BRANCH }}
+
+      # Upload cache on completion and check it out now
+      - name: Load .scons_cache directory
+        id: linux-editor-cache
+        uses: actions/cache@v2
+        with:
+          path: ${{github.workspace}}/.scons_cache/
+          key: ${{github.job}}-${{env.BASE_BRANCH}}-${{github.ref}}-${{github.sha}}
+          restore-keys: |
+            ${{github.job}}-${{env.BASE_BRANCH}}-${{github.ref}}-${{github.sha}}
+            ${{github.job}}-${{env.BASE_BRANCH}}-${{github.ref}}
+            ${{github.job}}-${{env.BASE_BRANCH}}
+      # Use python 3.x release (works cross platform; best to keep self contained in it's own step)
+      - name: Set up Python 3.x
+        uses: actions/setup-python@v2
+        with:
+          # Semantic version range syntax or exact version of a Python version
+          python-version: '3.x'
+          # Optional - x64 or x86 architecture, defaults to x64
+          architecture: 'x64'
+
+      # Setup scons, print python version and scons version info, so if anything is broken it won't run the build.
+      - name: Configuring Python packages
+        run: |
+          python -c "import sys; print(sys.version)"
+          python -m pip install scons pywin32
+          python --version
+          scons --version
+      # a
+      - uses: actions/checkout@v2
+        with:
+          path: ${{github.workspace}}/modules/luascript/
+      
+      # We should always be explicit with our flags usage here since it's gonna be sure to always set those flags
+      - name: Compilation
+        env:
+          SCONS_CACHE: ${{github.workspace}}/.scons_cache/
+        run: |
+          scons -j2 verbose=yes warnings=all platform=windows tools=yes target=release_debug module_luascript_enabled=yes
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: linux-64bits
+          path: bin/
